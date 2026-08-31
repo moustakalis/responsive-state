@@ -1,6 +1,6 @@
 {
   "name": "responsive-state",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Tiny, dependency-free, type-safe breakpoint state for the browser. Built on matchMedia, SSR-safe, framework-agnostic.",
   "keywords": [
     "breakpoint",
