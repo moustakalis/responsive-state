@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest an addition to the API
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: What problem does this solve? }
+    validations: { required: true }
+  - type: textarea
+    id: api
+    attributes: { label: Proposed API, description: Show the code you would like to write }
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This can be implemented with zero runtime dependencies
+        - label: This does not require a framework import in the core

@@ -1,0 +1,92 @@
+{
+  "name": "responsive-state",
+  "version": "0.1.0",
+  "description": "Tiny, dependency-free, type-safe breakpoint state for the browser. Built on matchMedia, SSR-safe, framework-agnostic.",
+  "keywords": [
+    "breakpoint",
+    "responsive",
+    "matchmedia",
+    "media-query",
+    "viewport",
+    "typescript",
+    "ssr",
+    "tailwind",
+    "bootstrap"
+  ],
+  "author": "Nickos Moustakas (https://github.com/moustakalis)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@11.24.0+sha512.bd27e345e976dcb0be0b7a1228217b049a817e21b1f355c90dbe7dc46671895a8bc1e6d06c24554505ea93ea0b45f489a27ec1bfbc8de6a9659fca0f16fa0000",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moustakalis/responsive-state.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moustakalis/responsive-state/issues"
+  },
+  "homepage": "https://github.com/moustakalis/responsive-state#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "size": "size-limit",
+    "attw": "attw --pack .",
+    "release": "pnpm build && changeset publish",
+    "prepublishOnly": "pnpm build"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/changelog-github": "^1.0.0",
+    "@changesets/cli": "^3.0.1",
+    "@size-limit/preset-small-lib": "^13.0.3",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.6",
+    "size-limit": "^13.0.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "2 kB",
+      "gzip": true
+    }
+  ]
+}
