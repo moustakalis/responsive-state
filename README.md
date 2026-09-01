@@ -105,17 +105,34 @@ const rs = createResponsiveState({ base: 0, ...config.theme.screens });
 | `is(name)` / `up(name)` / `down(name)` | Booleans with exact / `>=` / `<=` semantics |
 | `between(from, to)` | `from` inclusive, `to` exclusive |
 | `feature(name)` | Boolean for a named feature query |
-| `pick(values, fallback)` | Nearest-smaller-defined value — mobile-first cascade in JS |
+| `pick(values, fallback, options?)` | Resolves a tier value with mobile-first or desktop-first fallback |
 | `breakpoints` | Ascending breakpoint names |
 | `getServerSnapshot()` | Stable snapshot for `useSyncExternalStore` |
 | `destroy()` | Detaches every listener |
 
-### `pick` — the cascade you already know from CSS
+### `pick` — breakpoint-aware value resolution
+
+By default, `pick()` uses mobile-first inheritance: a value at a smaller
+breakpoint applies to larger breakpoints until overridden.
 
 ```ts
 const perPage = rs.pick({ base: 6, md: 12, xl: 24 }, 6);
 // base/sm → 6 · md/lg → 12 · xl/2xl → 24
 ```
+
+For desktop-first systems, use `fallbackDirection: 'down'`. A value defined at
+a wider tier then applies to narrower tiers until overridden.
+
+```ts
+const columns = rs.pick(
+  { tablet: 2, desktop: 4 },
+  1,
+  { fallbackDirection: 'down' },
+);
+```
+
+The exact current-breakpoint value always takes precedence. `undefined` is
+treated as missing and does not stop fallback resolution.
 
 ### Feature queries
 

@@ -36,6 +36,18 @@ export type Unsubscribe = () => void;
 
 export type Listener<S> = (snapshot: S, previous: S) => void;
 
+export type PickFallbackDirection = 'up' | 'down';
+
+export interface PickOptions {
+  /**
+   * Lookup direction when the current breakpoint has no defined value.
+   *
+   * - `up` (default): use the nearest smaller breakpoint (mobile-first).
+   * - `down`: use the nearest larger breakpoint (desktop-first).
+   */
+  fallbackDirection?: PickFallbackDirection;
+}
+
 export interface ResponsiveStateOptions<F extends string = never> {
   /**
    * Extra media queries exposed under `snapshot.features`.

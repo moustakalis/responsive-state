@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createResponsiveState, tailwind, devices } from '../src';
+import { createResponsiveState, devices, tailwind } from '../src';
 import { createFakeWindow } from './matchMedia';
 
 describe('createResponsiveState', () => {
@@ -50,13 +50,66 @@ describe('createResponsiveState', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('picks values with mobile-first fallback', () => {
+  it('picks values with upward fallback by default', () => {
     const { window, resize } = createFakeWindow(1280);
     const rs = createResponsiveState(tailwind, { window });
     const columns = { base: 1, md: 2, '2xl': 6 } as const;
+
     expect(rs.pick(columns, 1)).toBe(2);
+    expect(rs.pick(columns, 1, { fallbackDirection: 'up' })).toBe(2);
+
     resize(1600);
     expect(rs.pick(columns, 1)).toBe(6);
+  });
+
+  it('uses downward fallback when requested', () => {
+    const { window } = createFakeWindow(800);
+    const rs = createResponsiveState(
+      { xs: 0, sm: 640, md: 768, lg: 1024, xl: 1280 },
+      { window },
+    );
+
+    expect(
+      rs.pick({ sm: 'sm', xl: 'xl' }, 'fallback', { fallbackDirection: 'down' }),
+    ).toBe('xl');
+  });
+
+  it('returns fallback when downward resolution finds no value', () => {
+    const { window } = createFakeWindow(800);
+    const rs = createResponsiveState(
+      { xs: 0, sm: 640, md: 768, lg: 1024 },
+      { window },
+    );
+
+    expect(
+      rs.pick({ xs: 'xs', sm: 'sm' }, 'fallback', { fallbackDirection: 'down' }),
+    ).toBe('fallback');
+  });
+
+  it('skips undefined values during downward fallback', () => {
+    const { window } = createFakeWindow(800);
+    const rs = createResponsiveState(
+      { xs: 0, sm: 640, md: 768, lg: 1024, xl: 1280 },
+      { window },
+    );
+    const values: Partial<Record<'xs' | 'sm' | 'md' | 'lg' | 'xl', string | undefined>> = {
+      lg: undefined,
+      xl: 'xl',
+    };
+
+    expect(rs.pick(values, 'fallback', { fallbackDirection: 'down' })).toBe('xl');
+  });
+
+  it('prefers an exact value in either fallback direction', () => {
+    const { window } = createFakeWindow(800);
+    const rs = createResponsiveState(
+      { xs: 0, sm: 640, md: 768, lg: 1024 },
+      { window },
+    );
+    const values = { sm: 'sm', md: 'md', lg: 'lg' };
+
+    expect(rs.pick(values, 'fallback')).toBe('md');
+    expect(rs.pick(values, 'fallback', { fallbackDirection: 'down' })).toBe('md');
   });
 
   it('tracks extra feature queries', () => {

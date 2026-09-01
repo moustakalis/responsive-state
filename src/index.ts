@@ -7,6 +7,8 @@ export type {
   BreakpointName,
   Listener,
   MatchMap,
+  PickFallbackDirection,
+  PickOptions,
   ResponsiveSnapshot,
   ResponsiveStateOptions,
   Unsubscribe,

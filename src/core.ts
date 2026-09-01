@@ -4,6 +4,7 @@ import type {
   BreakpointName,
   Listener,
   MatchMap,
+  PickOptions,
   ResponsiveSnapshot,
   ResponsiveStateOptions,
   Unsubscribe,
@@ -41,10 +42,11 @@ export interface ResponsiveState<K extends string, F extends string = never> {
   /** `true` when a named feature query matches. */
   feature(name: F): boolean;
   /**
-   * Value picker with mobile-first fallback: returns the value for the
-   * current breakpoint, or the nearest smaller one that is defined.
+   * Resolves a value for the current breakpoint. By default, uses the nearest
+   * smaller defined breakpoint (mobile-first); pass `{ fallbackDirection:
+   * 'down' }` to use the nearest larger one (desktop-first).
    */
-  pick<V>(values: Partial<Record<K, V>>, fallback: V): V;
+  pick<V>(values: Partial<Record<K, V>>, fallback: V, options?: PickOptions): V;
   /** Detach all listeners. The store becomes inert but still readable. */
   destroy(): void;
   /** Ascending breakpoint names. */
@@ -121,7 +123,7 @@ export function createResponsiveState<
   }
 
   function readFeatures(): boolean[] {
-    return featureLists.map((l) => l.matches);
+    return featureLists.map((list) => list.matches);
   }
 
   const serverSnapshot = build(names.indexOf(ssrName), featureEntries.map(() => false));
@@ -145,7 +147,7 @@ export function createResponsiveState<
       next.current === snapshot.current &&
       next.width === snapshot.width &&
       next.height === snapshot.height &&
-      featureEntries.every(([n]) => next.features[n] === snapshot.features[n])
+      featureEntries.every(([name]) => next.features[name] === snapshot.features[name])
     ) {
       return;
     }
@@ -201,11 +203,15 @@ export function createResponsiveState<
       return a >= 0 && b >= 0 && snapshot.index >= a && snapshot.index < b;
     },
     feature: (name) => snapshot.features[name] ?? false,
-    pick(values, fallback) {
-      for (let i = snapshot.index; i >= 0; i--) {
+    pick(values, fallback, pickOptions) {
+      const step = pickOptions?.fallbackDirection === 'down' ? 1 : -1;
+      const end = step === 1 ? names.length : -1;
+
+      for (let i = snapshot.index; i !== end; i += step) {
         const value = values[names[i]!];
         if (value !== undefined) return value;
       }
+
       return fallback;
     },
     destroy() {
