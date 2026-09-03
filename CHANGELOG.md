@@ -1,5 +1,11 @@
 # responsive-state
 
+## 0.2.1
+
+### Patch Changes
+
+- [`bd289d5`](https://github.com/moustakalis/responsive-state/commit/bd289d5f5896fa5820a4b79eaee646369a48fffc) Thanks [@moustakalis](https://github.com/moustakalis)! - Refresh the published README with clearer problem-focused guidance and practical integration recipes.
+
 ## 0.2.0
 
 ### Minor Changes
