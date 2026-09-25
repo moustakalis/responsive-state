@@ -7,19 +7,23 @@ Thanks for taking the time to contribute.
 ```bash
 pnpm install
 pnpm test
+
+# Real-browser tests (Chromium via Playwright), run once to install the browser:
+pnpm exec playwright install chromium
+pnpm test:browser
 ```
 
 ## Workflow
 
 1. Fork and branch from `main`.
 2. Add or update tests — the suite must stay above the coverage thresholds.
-3. Run `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
+3. Run `pnpm typecheck && pnpm lint && pnpm test && pnpm test:browser && pnpm build`.
 4. Add a changeset describing the user-facing effect:
    ```bash
    pnpm changeset
    ```
    Use `patch` for fixes, `minor` for new API, `major` for breaking changes.
-5. Open a pull request. CI runs on Node 18/20/22.
+5. Open a pull request. CI runs on Node 22/24.
 
 ## Design constraints
 

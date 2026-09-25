@@ -5,3 +5,5 @@ coverage
 *.log
 .idea
 .vscode
+.vitest-attachments
+__screenshots__
