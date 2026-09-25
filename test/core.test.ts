@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createResponsiveState, devices, tailwind } from '../src';
 import { createFakeWindow } from './matchMedia';
 
@@ -169,9 +169,84 @@ describe('createResponsiveState', () => {
   });
 
   it('accepts rem-based breakpoints', () => {
-    const { window } = createFakeWindow(700);
+    const { window, resize } = createFakeWindow(700);
     const rs = createResponsiveState({ base: 0, wide: '48rem' }, { window });
     expect(rs.get().current).toBe('base');
+    resize(900);
+    expect(rs.get().current).toBe('wide');
+  });
+
+  it('treats unitless numeric strings as pixels', () => {
+    const { window, resize } = createFakeWindow(700);
+    const rs = createResponsiveState({ base: '0', md: '768' }, { window });
+    expect(rs.get().current).toBe('base');
+    resize(900);
+    expect(rs.get().current).toBe('md');
+  });
+
+  it('rejects a smallest breakpoint that does not start at 0', () => {
+    expect(() => createResponsiveState({ sm: 640, md: 768 }, { window: null })).toThrow(
+      /smallest breakpoint must start at 0 \(got sm: 640\)/i,
+    );
+    expect(() => createResponsiveState({ sm: '40rem', md: 768 }, { window: null })).toThrow(
+      /got sm: "40rem"/,
+    );
+  });
+
+  it('accepts zero written as a CSS length', () => {
+    const { window } = createFakeWindow(300);
+    expect(createResponsiveState({ base: '0rem', md: 768 }, { window }).get().current).toBe('base');
+    expect(createResponsiveState({ base: '0px', md: 768 }, { window }).get().current).toBe('base');
+  });
+
+  it('exposes a frozen breakpoints list', () => {
+    const { window, resize } = createFakeWindow(1300);
+    const rs = createResponsiveState(tailwind, { window });
+    expect(Object.isFrozen(rs.breakpoints)).toBe(true);
+    expect(() => (rs.breakpoints as string[]).reverse()).toThrow(TypeError);
+    resize(700);
+    expect(rs.get().current).toBe('sm');
+  });
+
+  describe('when a subscriber throws', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    it('still notifies the other subscribers and reports the error', () => {
+      const reportError = vi.fn();
+      vi.stubGlobal('reportError', reportError);
+      const { window, resize } = createFakeWindow(500);
+      const rs = createResponsiveState(tailwind, { window });
+      const error = new Error('boom');
+      const second = vi.fn();
+      rs.subscribe(() => {
+        throw error;
+      });
+      rs.subscribe(second);
+
+      expect(() => resize(1300)).not.toThrow();
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(rs.get().current).toBe('xl');
+      expect(reportError).toHaveBeenCalledWith(error);
+    });
+
+    it('rethrows asynchronously where reportError is unavailable', () => {
+      vi.stubGlobal('reportError', undefined);
+      vi.useFakeTimers();
+      const { window, resize } = createFakeWindow(500);
+      const rs = createResponsiveState(tailwind, { window });
+      const second = vi.fn();
+      rs.subscribe(() => {
+        throw new Error('boom');
+      });
+      rs.subscribe(second);
+
+      expect(() => resize(1300)).not.toThrow();
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(() => vi.runAllTimers()).toThrow('boom');
+    });
   });
 
   it('sorts breakpoints declared out of order', () => {

@@ -5,6 +5,9 @@ describe('media helpers', () => {
   it('normalizes lengths', () => {
     expect(toLength(768)).toBe('768px');
     expect(toLength('48rem')).toBe('48rem');
+    expect(toLength('768')).toBe('768px');
+    expect(toLength(' 768 ')).toBe('768px');
+    expect(toLength('.5')).toBe('.5px');
   });
 
   it('steps down without overlap', () => {
@@ -15,6 +18,7 @@ describe('media helpers', () => {
 
   it('builds queries', () => {
     expect(minWidth(640)).toBe('(min-width: 640px)');
+    expect(minWidth('640')).toBe('(min-width: 640px)');
     expect(maxWidth(640)).toBe('(max-width: 639.98px)');
     expect(betweenWidth(640, 1024)).toBe('(min-width: 640px) and (max-width: 1023.98px)');
   });

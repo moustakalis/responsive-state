@@ -17,6 +17,24 @@ function resolveWindow(injected?: Window | null): Window | null {
   return (globalThis as { window?: Window }).window ?? null;
 }
 
+/**
+ * Surfaces a subscriber's error without letting it stop the remaining
+ * subscribers or escape from the `matchMedia` change handler. Uses the
+ * standard `reportError` where available, which fires `window.onerror` and
+ * logs to the console like an uncaught error would.
+ */
+function reportListenerError(error: unknown): void {
+  const scope = globalThis as { reportError?: (e: unknown) => void };
+  if (typeof scope.reportError === 'function') {
+    // Called as a method: an unbound `reportError` throws "Illegal invocation".
+    scope.reportError(error);
+  } else {
+    setTimeout(() => {
+      throw error;
+    });
+  }
+}
+
 function toPx(value: number | string): number {
   if (typeof value === 'number') return value;
   const match = /^(-?[\d.]+)(px|rem|em)?$/i.exec(value.trim());
@@ -49,7 +67,7 @@ export interface ResponsiveState<K extends string, F extends string = never> {
   pick<V>(values: Partial<Record<K, V>>, fallback: V, options?: PickOptions): V;
   /** Detach all listeners. The store becomes inert but still readable. */
   destroy(): void;
-  /** Ascending breakpoint names. */
+  /** Ascending breakpoint names (frozen). */
   readonly breakpoints: readonly K[];
   /** For `useSyncExternalStore` / server rendering. */
   getServerSnapshot(): ResponsiveSnapshot<K, F>;
@@ -70,6 +88,18 @@ export function createResponsiveState<
   if (names.length === 0) {
     throw new Error('[responsive-state] At least one breakpoint is required.');
   }
+  // The smallest tier is the fallback when no larger min-width matches, so it
+  // must genuinely cover every viewport. Otherwise `current`, `up` and
+  // `active` would claim a match the browser does not report.
+  const smallest = names[0]!;
+  if (toPx(breakpoints[smallest]!) !== 0) {
+    const shown = JSON.stringify(breakpoints[smallest]);
+    throw new Error(
+      `[responsive-state] The smallest breakpoint must start at 0 (got ${smallest}: ${shown}). ` +
+        `Add a base tier, e.g. { base: 0, ${smallest}: ${shown}, ... }.`,
+    );
+  }
+  Object.freeze(names);
 
   const featureEntries = Object.entries(options.features ?? {}) as [F, string][];
   const win = resolveWindow(options.window);
@@ -154,7 +184,13 @@ export function createResponsiveState<
     const previous = snapshot;
     snapshot = next;
     attr?.target.setAttribute(attr.name, next.current);
-    for (const listener of listeners) listener(next, previous);
+    for (const listener of listeners) {
+      try {
+        listener(next, previous);
+      } catch (error) {
+        reportListenerError(error);
+      }
+    }
   }
 
   function update(): void {

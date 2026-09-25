@@ -1,6 +1,14 @@
-/** Normalizes a breakpoint value to a CSS length string. */
+const UNITLESS = /^-?(?:\d+\.?\d*|\.\d+)$/;
+
+/**
+ * Normalizes a breakpoint value to a CSS length string. Numbers and unitless
+ * numeric strings (`'768'`) are treated as pixels, because a unitless non-zero
+ * length is invalid inside a media query and would never match.
+ */
 export function toLength(value: number | string): string {
-  return typeof value === 'number' ? `${value}px` : value;
+  if (typeof value === 'number') return `${value}px`;
+  const trimmed = value.trim();
+  return UNITLESS.test(trimmed) ? `${trimmed}px` : trimmed;
 }
 
 /**
