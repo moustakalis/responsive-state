@@ -128,7 +128,7 @@ const appViewport = createResponsiveState(tailwind);
 | `material` | `compact` 0, `medium` 600, `expanded` 840, `large` 1200, `extraLarge` 1600 |
 | `devices` | `mobile` 0, `tablet` 768, `desktop` 1440 |
 
-Or use the names and values your own product already understands. Numeric values are pixels; CSS lengths such as `48rem` also work.
+Or use the names and values your own product already understands. Numeric values (and unitless strings like `'768'`) are pixels; CSS lengths such as `48rem` also work. The smallest breakpoint must be `0`, so every viewport width maps to a breakpoint — `createResponsiveState` throws otherwise.
 
 ```ts
 const appViewport = createResponsiveState({
@@ -429,7 +429,7 @@ On the client, media queries are evaluated synchronously when the store is creat
 Contributions are welcome. Please keep the core dependency-free, include focused tests for behaviour changes, and run:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm build
+pnpm typecheck && pnpm lint && pnpm test && pnpm test:browser && pnpm build
 ```
 
 ## License

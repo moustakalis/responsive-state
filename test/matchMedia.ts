@@ -19,12 +19,18 @@ export function createFakeWindow(initialWidth = 1024, initialHeight = 768) {
     }
   }
 
+  // Like a browser, `rem`/`em` in media queries resolve against the initial
+  // font size (16px), and unitless non-zero lengths are invalid (never match).
+  function px(num: string, unit: string): number {
+    return unit === 'px' ? Number(num) : Number(num) * 16;
+  }
+
   function evaluate(query: string): boolean {
     return query.split(' and ').every((part) => {
-      const min = /\(min-width:\s*([\d.]+)px\)/.exec(part);
-      if (min) return width >= Number(min[1]);
-      const max = /\(max-width:\s*([\d.]+)px\)/.exec(part);
-      if (max) return width <= Number(max[1]);
+      const min = /\(min-width:\s*([\d.]+)(px|rem|em)\)/.exec(part);
+      if (min) return width >= px(min[1]!, min[2]!);
+      const max = /\(max-width:\s*([\d.]+)(px|rem|em)\)/.exec(part);
+      if (max) return width <= px(max[1]!, max[2]!);
       const orientation = /\(orientation:\s*(\w+)\)/.exec(part);
       if (orientation)
         return orientation[1] === (width >= height ? 'landscape' : 'portrait');

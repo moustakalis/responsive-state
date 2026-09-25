@@ -2,7 +2,9 @@
  * A breakpoint map: name -> minimum viewport width.
  *
  * Widths may be numbers (interpreted as `px`) or CSS length strings
- * (`'48rem'`, `'768px'`, `'40em'`).
+ * (`'48rem'`, `'768px'`, `'40em'`). Unitless strings (`'768'`) are treated
+ * as `px`. The smallest breakpoint must be `0` so that every viewport width
+ * resolves to a breakpoint.
  */
 export type BreakpointMap = Record<string, number | string>;
 
