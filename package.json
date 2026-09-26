@@ -11,7 +11,12 @@
     "typescript",
     "ssr",
     "tailwind",
-    "bootstrap"
+    "bootstrap",
+    "css-variables",
+    "tailwindcss-v4",
+    "bulma",
+    "ant-design",
+    "foundation"
   ],
   "author": "Nickos Moustakas (https://github.com/moustakalis)",
   "license": "MIT",
@@ -87,8 +92,16 @@
   },
   "size-limit": [
     {
+      "name": "createResponsiveState",
       "path": "dist/index.js",
+      "import": "{ createResponsiveState }",
       "limit": "2 kB",
+      "gzip": true
+    },
+    {
+      "name": "whole package",
+      "path": "dist/index.js",
+      "limit": "2.5 kB",
       "gzip": true
     }
   ]

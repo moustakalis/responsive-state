@@ -1,4 +1,5 @@
-import { minWidth } from './media';
+import { resolveWindow } from './env';
+import { minWidth, sortBreakpoints, toLength, toPx } from './media';
 import type {
   BreakpointMap,
   BreakpointName,
@@ -8,14 +9,10 @@ import type {
   ResponsiveSnapshot,
   ResponsiveStateOptions,
   Unsubscribe,
+  WatchOptions,
 } from './types';
 
 const NOOP: Unsubscribe = () => {};
-
-function resolveWindow(injected?: Window | null): Window | null {
-  if (injected !== undefined) return injected;
-  return (globalThis as { window?: Window }).window ?? null;
-}
 
 /**
  * Surfaces a subscriber's error without letting it stop the remaining
@@ -35,13 +32,17 @@ function reportListenerError(error: unknown): void {
   }
 }
 
-function toPx(value: number | string): number {
-  if (typeof value === 'number') return value;
-  const match = /^(-?[\d.]+)(px|rem|em)?$/i.exec(value.trim());
-  if (!match) return Number.POSITIVE_INFINITY;
-  const num = Number(match[1]);
-  const unit = (match[2] ?? 'px').toLowerCase();
-  return unit === 'px' ? num : num * 16;
+/**
+ * Listens for `change` on a MediaQueryList, falling back to the legacy
+ * `addListener` API for Safari 13 and older.
+ */
+function listen(list: MediaQueryList, callback: () => void): Unsubscribe {
+  if (typeof list.addEventListener === 'function') {
+    list.addEventListener('change', callback);
+    return () => list.removeEventListener('change', callback);
+  }
+  list.addListener(callback);
+  return () => list.removeListener(callback);
 }
 
 export interface ResponsiveState<K extends string, F extends string = never> {
@@ -49,12 +50,30 @@ export interface ResponsiveState<K extends string, F extends string = never> {
   get(): ResponsiveSnapshot<K, F>;
   /** Subscribe to breakpoint changes. Fires only when the snapshot changes. */
   subscribe(listener: Listener<ResponsiveSnapshot<K, F>>): Unsubscribe;
+  /**
+   * Watch a value derived from the snapshot. The listener runs only when the
+   * selected value changes, which makes "entered / left desktop" style logic
+   * and custom tiers one-liners.
+   *
+   * @example
+   * rs.watch((s) => s.up.lg, (isDesktop) => { if (isDesktop) closeMobileMenu(); });
+   */
+  watch<T>(
+    selector: (snapshot: ResponsiveSnapshot<K, F>) => T,
+    listener: (value: T, previous: T) => void,
+    options?: WatchOptions<T>,
+  ): Unsubscribe;
   /** `true` when the active breakpoint is exactly `name`. */
   is(name: K): boolean;
   /** `true` at `name` and wider (mobile-first `>=`). */
   up(name: K): boolean;
   /** `true` at `name` and narrower (`<=`, inclusive of `name`'s range). */
   down(name: K): boolean;
+  /**
+   * `true` when strictly narrower than `name` (`<`). Matches Tailwind's
+   * `max-*` variants and the `maxWidth()` helper.
+   */
+  below(name: K): boolean;
   /** `true` between `from` (inclusive) and `to` (exclusive). */
   between(from: K, to: K): boolean;
   /** `true` when a named feature query matches. */
@@ -73,18 +92,13 @@ export interface ResponsiveState<K extends string, F extends string = never> {
   getServerSnapshot(): ResponsiveSnapshot<K, F>;
 }
 
-export function createResponsiveState<
-  T extends BreakpointMap,
-  F extends string = never,
->(
+export function createResponsiveState<T extends BreakpointMap, F extends string = never>(
   breakpoints: T,
-  options: ResponsiveStateOptions<F> = {},
+  options: ResponsiveStateOptions<F, BreakpointName<T>> = {},
 ): ResponsiveState<BreakpointName<T>, F> {
   type K = BreakpointName<T>;
 
-  const names = (Object.keys(breakpoints) as K[]).sort(
-    (a, b) => toPx(breakpoints[a]!) - toPx(breakpoints[b]!),
-  );
+  const names = sortBreakpoints(breakpoints);
   if (names.length === 0) {
     throw new Error('[responsive-state] At least one breakpoint is required.');
   }
@@ -104,10 +118,27 @@ export function createResponsiveState<
   const featureEntries = Object.entries(options.features ?? {}) as [F, string][];
   const win = resolveWindow(options.window);
   const supported = !!win && typeof win.matchMedia === 'function';
+  const track = !!options.trackViewport;
+  const ssr = options.ssr ?? {};
 
-  const ssrName = (options.ssrBreakpoint as K | undefined) ?? names[0]!;
-  if (!names.includes(ssrName)) {
-    throw new Error(`[responsive-state] Unknown ssrBreakpoint "${ssrName}".`);
+  if (options.ssrBreakpoint !== undefined && ssr.width !== undefined) {
+    throw new Error(
+      '[responsive-state] Use either ssrBreakpoint or ssr.width, not both.',
+    );
+  }
+  let ssrIndex = 0;
+  if (options.ssrBreakpoint !== undefined) {
+    ssrIndex = names.indexOf(options.ssrBreakpoint);
+    if (ssrIndex < 0) {
+      throw new Error(
+        `[responsive-state] Unknown ssrBreakpoint "${options.ssrBreakpoint}".`,
+      );
+    }
+  } else if (ssr.width !== undefined) {
+    const width = ssr.width;
+    names.forEach((name, i) => {
+      if (toPx(breakpoints[name]!) <= width) ssrIndex = i;
+    });
   }
 
   const lists = supported
@@ -117,21 +148,28 @@ export function createResponsiveState<
     ? featureEntries.map(([, query]) => win!.matchMedia(query))
     : [];
 
-  function build(activeIndex: number, features: boolean[]): ResponsiveSnapshot<K, F> {
+  function build(
+    activeIndex: number,
+    features: boolean[],
+    width: number,
+    height: number,
+  ): ResponsiveSnapshot<K, F> {
     const current = names[activeIndex]!;
+    const next = names[activeIndex + 1];
     const is = {} as MatchMap<K>;
     const up = {} as MatchMap<K>;
     const down = {} as MatchMap<K>;
+    const below = {} as MatchMap<K>;
     names.forEach((name, i) => {
       is[name] = i === activeIndex;
       up[name] = activeIndex >= i;
       down[name] = activeIndex <= i;
+      below[name] = activeIndex < i;
     });
     const featureMap = {} as MatchMap<F>;
     featureEntries.forEach(([name], i) => {
       featureMap[name] = features[i] ?? false;
     });
-    const track = options.trackViewport && win;
     return Object.freeze({
       current,
       index: activeIndex,
@@ -139,25 +177,33 @@ export function createResponsiveState<
       is: Object.freeze(is),
       up: Object.freeze(up),
       down: Object.freeze(down),
+      below: Object.freeze(below),
       features: Object.freeze(featureMap),
-      width: track ? win!.innerWidth : 0,
-      height: track ? win!.innerHeight : 0,
+      min: toLength(breakpoints[current]!),
+      max: next === undefined ? null : toLength(breakpoints[next]!),
+      width,
+      height,
     });
   }
 
-  function readIndex(): number {
-    if (!supported) return names.indexOf(ssrName);
+  function read(): ResponsiveSnapshot<K, F> {
     let idx = 0;
     for (let i = 0; i < lists.length; i++) if (lists[i]!.matches) idx = i;
-    return idx;
+    return build(
+      idx,
+      featureLists.map((list) => list.matches),
+      track ? win!.innerWidth : 0,
+      track ? win!.innerHeight : 0,
+    );
   }
 
-  function readFeatures(): boolean[] {
-    return featureLists.map((list) => list.matches);
-  }
-
-  const serverSnapshot = build(names.indexOf(ssrName), featureEntries.map(() => false));
-  let snapshot = supported ? build(readIndex(), readFeatures()) : serverSnapshot;
+  const serverSnapshot = build(
+    ssrIndex,
+    featureEntries.map(([name]) => ssr.features?.[name] ?? false),
+    track ? (ssr.width ?? 0) : 0,
+    track ? (ssr.height ?? 0) : 0,
+  );
+  let snapshot = supported ? read() : serverSnapshot;
 
   const listeners = new Set<Listener<ResponsiveSnapshot<K, F>>>();
   const cleanups: Unsubscribe[] = [];
@@ -167,7 +213,9 @@ export function createResponsiveState<
     const cfg = options.syncAttribute;
     if (!cfg || !win) return null;
     const target =
-      (typeof cfg === 'object' ? cfg.target : null) ?? win.document?.documentElement ?? null;
+      (typeof cfg === 'object' ? cfg.target : null) ??
+      win.document?.documentElement ??
+      null;
     const name = (typeof cfg === 'object' && cfg.name) || 'data-breakpoint';
     return target ? { target, name } : null;
   })();
@@ -194,16 +242,18 @@ export function createResponsiveState<
   }
 
   function update(): void {
-    if (destroyed) return;
-    emit(build(readIndex(), readFeatures()));
+    if (!destroyed) emit(read());
+  }
+
+  function subscribe(listener: Listener<ResponsiveSnapshot<K, F>>): Unsubscribe {
+    if (destroyed) return NOOP;
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 
   if (supported) {
-    for (const list of [...lists, ...featureLists]) {
-      list.addEventListener('change', update);
-      cleanups.push(() => list.removeEventListener('change', update));
-    }
-    if (options.trackViewport) {
+    for (const list of [...lists, ...featureLists]) cleanups.push(listen(list, update));
+    if (track) {
       let frame = 0;
       const onResize = () => {
         if (frame) return;
@@ -225,14 +275,23 @@ export function createResponsiveState<
     breakpoints: names,
     get: () => snapshot,
     getServerSnapshot: () => serverSnapshot,
-    subscribe(listener) {
-      if (destroyed) return NOOP;
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+    subscribe,
+    watch(selector, listener, watchOptions = {}) {
+      const equals = watchOptions.equals ?? Object.is;
+      let value = selector(snapshot);
+      if (watchOptions.immediate) listener(value, value);
+      return subscribe((next) => {
+        const selected = selector(next);
+        if (equals(selected, value)) return;
+        const previous = value;
+        value = selected;
+        listener(selected, previous);
+      });
     },
     is: (name) => snapshot.is[name] ?? false,
     up: (name) => snapshot.up[name] ?? false,
     down: (name) => snapshot.down[name] ?? false,
+    below: (name) => snapshot.below[name] ?? false,
     between(from, to) {
       const a = names.indexOf(from);
       const b = names.indexOf(to);

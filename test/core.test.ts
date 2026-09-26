@@ -150,6 +150,7 @@ describe('createResponsiveState', () => {
 
   it('rejects an unknown ssrBreakpoint', () => {
     expect(() =>
+      // @ts-expect-error -- ssrBreakpoint is typed to the breakpoint names
       createResponsiveState(tailwind, { window: null, ssrBreakpoint: 'nope' }),
     ).toThrow(/unknown ssrbreakpoint/i);
   });

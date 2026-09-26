@@ -24,13 +24,19 @@ export interface ResponsiveSnapshot<K extends string, F extends string = never> 
   readonly is: Readonly<MatchMap<K>>;
   /** `{ sm: true, md: true, lg: false }` — `>=` semantics. */
   readonly up: Readonly<MatchMap<K>>;
-  /** `{ sm: false, md: true, lg: true }` — `<=` semantics. */
+  /** `{ sm: false, md: true, lg: true }` — `<=` semantics (inclusive of the named tier). */
   readonly down: Readonly<MatchMap<K>>;
+  /** `{ sm: false, md: false, lg: true }` — strictly narrower than the named breakpoint (`<`). */
+  readonly below: Readonly<MatchMap<K>>;
   /** Extra user-defined feature queries (orientation, pointer, motion...). */
   readonly features: Readonly<MatchMap<F>>;
-  /** Viewport width in px at the time of evaluation (`0` during SSR). */
+  /** CSS length where the current tier starts (inclusive), e.g. `'48rem'`. */
+  readonly min: string;
+  /** CSS length where the next tier starts (exclusive), or `null` for the widest tier. */
+  readonly max: string | null;
+  /** Viewport width in px. `0` unless `trackViewport` is enabled. */
   readonly width: number;
-  /** Viewport height in px at the time of evaluation (`0` during SSR). */
+  /** Viewport height in px. `0` unless `trackViewport` is enabled. */
   readonly height: number;
 }
 
@@ -50,7 +56,30 @@ export interface PickOptions {
   fallbackDirection?: PickFallbackDirection;
 }
 
-export interface ResponsiveStateOptions<F extends string = never> {
+export interface WatchOptions<T> {
+  /** Also call the listener once, synchronously, with the current value. */
+  immediate?: boolean;
+  /**
+   * Decides whether the selected value changed.
+   * @default Object.is
+   */
+  equals?: (a: T, b: T) => boolean;
+}
+
+/** Assumed environment for server rendering, where there is no viewport. */
+export interface SsrEnvironment<F extends string = never> {
+  /** Viewport width in px to resolve the breakpoint from (e.g. from client hints). */
+  width?: number;
+  /** Viewport height in px, reported when `trackViewport` is enabled. */
+  height?: number;
+  /** Assumed feature query results. Unlisted features are `false`. */
+  features?: Partial<Record<F, boolean>>;
+}
+
+export interface ResponsiveStateOptions<
+  F extends string = never,
+  K extends string = string,
+> {
   /**
    * Extra media queries exposed under `snapshot.features`.
    * @example { dark: '(prefers-color-scheme: dark)', touch: '(pointer: coarse)' }
@@ -58,9 +87,14 @@ export interface ResponsiveStateOptions<F extends string = never> {
   features?: Record<F, string>;
   /**
    * Breakpoint assumed before hydration / during SSR. Defaults to the
-   * smallest breakpoint (mobile-first).
+   * smallest breakpoint (mobile-first). Cannot be combined with `ssr.width`.
    */
-  ssrBreakpoint?: string;
+  ssrBreakpoint?: K;
+  /**
+   * Assumed viewport and feature values during SSR. `width` resolves the
+   * breakpoint the same way the browser would.
+   */
+  ssr?: SsrEnvironment<F>;
   /**
    * Mirror the active breakpoint onto an element as a `data-*` attribute
    * (e.g. `<html data-breakpoint="md">`). Pass `false` to disable.
