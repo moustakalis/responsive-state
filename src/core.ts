@@ -94,7 +94,9 @@ export interface ResponsiveState<K extends string, F extends string = never> {
 
 export function createResponsiveState<T extends BreakpointMap, F extends string = never>(
   breakpoints: T,
-  options: ResponsiveStateOptions<F, BreakpointName<T>> = {},
+  // `string & {}` keeps literal autocomplete while still accepting options
+  // objects typed as `ResponsiveStateOptions<F>` (where the name is `string`).
+  options: ResponsiveStateOptions<F, BreakpointName<T> | (string & {})> = {},
 ): ResponsiveState<BreakpointName<T>, F> {
   type K = BreakpointName<T>;
 
@@ -128,7 +130,7 @@ export function createResponsiveState<T extends BreakpointMap, F extends string 
   }
   let ssrIndex = 0;
   if (options.ssrBreakpoint !== undefined) {
-    ssrIndex = names.indexOf(options.ssrBreakpoint);
+    ssrIndex = names.indexOf(options.ssrBreakpoint as K);
     if (ssrIndex < 0) {
       throw new Error(
         `[responsive-state] Unknown ssrBreakpoint "${options.ssrBreakpoint}".`,
@@ -197,13 +199,20 @@ export function createResponsiveState<T extends BreakpointMap, F extends string 
     );
   }
 
+  const ssrFeatures = featureEntries.map(([name]) => ssr.features?.[name] ?? false);
   const serverSnapshot = build(
     ssrIndex,
-    featureEntries.map(([name]) => ssr.features?.[name] ?? false),
+    ssrFeatures,
     track ? (ssr.width ?? 0) : 0,
     track ? (ssr.height ?? 0) : 0,
   );
-  let snapshot = supported ? read() : serverSnapshot;
+  // Without matchMedia (e.g. jsdom) the breakpoint falls back to the server
+  // assumption, but a real window can still report its size.
+  let snapshot = supported
+    ? read()
+    : track && win
+      ? build(ssrIndex, ssrFeatures, win.innerWidth, win.innerHeight)
+      : serverSnapshot;
 
   const listeners = new Set<Listener<ResponsiveSnapshot<K, F>>>();
   const cleanups: Unsubscribe[] = [];
@@ -277,16 +286,26 @@ export function createResponsiveState<T extends BreakpointMap, F extends string 
     getServerSnapshot: () => serverSnapshot,
     subscribe,
     watch(selector, listener, watchOptions = {}) {
+      if (destroyed) return NOOP;
       const equals = watchOptions.equals ?? Object.is;
       let value = selector(snapshot);
-      if (watchOptions.immediate) listener(value, value);
-      return subscribe((next) => {
+      const unsubscribe = subscribe((next) => {
         const selected = selector(next);
         if (equals(selected, value)) return;
         const previous = value;
         value = selected;
         listener(selected, previous);
       });
+      if (watchOptions.immediate) {
+        // Same isolation as change notifications: a throwing listener is
+        // reported, and the watch stays registered.
+        try {
+          listener(value, value);
+        } catch (error) {
+          reportListenerError(error);
+        }
+      }
+      return unsubscribe;
     },
     is: (name) => snapshot.is[name] ?? false,
     up: (name) => snapshot.up[name] ?? false,

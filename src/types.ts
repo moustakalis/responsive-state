@@ -5,10 +5,19 @@
  * (`'48rem'`, `'768px'`, `'40em'`). Unitless strings (`'768'`) are treated
  * as `px`. The smallest breakpoint must be `0` so that every viewport width
  * resolves to a breakpoint.
+ *
+ * Breakpoints are ordered by width, which is only possible for `px`, `rem`,
+ * `em` and unitless values; other units (`vw`, `ch`, `calc()`) sort last.
  */
 export type BreakpointMap = Record<string, number | string>;
 
 export type BreakpointName<T extends BreakpointMap> = Extract<keyof T, string>;
+
+/**
+ * Blocks type inference from a position (like TypeScript 5.4's `NoInfer`, but
+ * compatible with older compilers reading the published declarations).
+ */
+type NoInferCompat<T> = [T][T extends unknown ? 0 : never];
 
 /** Result of a single named media query. */
 export type MatchMap<K extends string> = Record<K, boolean>;
@@ -57,7 +66,10 @@ export interface PickOptions {
 }
 
 export interface WatchOptions<T> {
-  /** Also call the listener once, synchronously, with the current value. */
+  /**
+   * Also call the listener once, synchronously, with the current value. On
+   * that first call `previous` equals `value`.
+   */
   immediate?: boolean;
   /**
    * Decides whether the selected value changed.
@@ -73,7 +85,7 @@ export interface SsrEnvironment<F extends string = never> {
   /** Viewport height in px, reported when `trackViewport` is enabled. */
   height?: number;
   /** Assumed feature query results. Unlisted features are `false`. */
-  features?: Partial<Record<F, boolean>>;
+  features?: Partial<Record<NoInferCompat<F>, boolean>>;
 }
 
 export interface ResponsiveStateOptions<
@@ -88,6 +100,7 @@ export interface ResponsiveStateOptions<
   /**
    * Breakpoint assumed before hydration / during SSR. Defaults to the
    * smallest breakpoint (mobile-first). Cannot be combined with `ssr.width`.
+   * Editors autocomplete your breakpoint names; unknown names throw.
    */
   ssrBreakpoint?: K;
   /**

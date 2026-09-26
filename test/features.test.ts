@@ -68,6 +68,42 @@ describe('watch()', () => {
     expect(handset).toHaveBeenCalledTimes(2);
   });
 
+  it('reports a throwing immediate listener and stays registered', () => {
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
+    try {
+      const { window, resize } = createFakeWindow(500);
+      const rs = createResponsiveState(tailwind3, { window });
+      const error = new Error('boom');
+      const calls: boolean[] = [];
+      expect(() =>
+        rs.watch(
+          (s) => s.up.lg,
+          (value) => {
+            calls.push(value);
+            if (calls.length === 1) throw error;
+          },
+          { immediate: true },
+        ),
+      ).not.toThrow();
+      expect(reportError).toHaveBeenCalledWith(error);
+
+      resize(1300);
+      expect(calls).toEqual([false, true]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does nothing once the store is destroyed', () => {
+    const { window } = createFakeWindow(500);
+    const rs = createResponsiveState(tailwind3, { window });
+    rs.destroy();
+    const spy = vi.fn();
+    rs.watch((s) => s.current, spy, { immediate: true })();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('accepts a custom equality check and unsubscribes', () => {
     const { window, resize } = createFakeWindow(500);
     const rs = createResponsiveState(tailwind3, { window });
@@ -109,6 +145,14 @@ describe('ssr', () => {
     const rs = createResponsiveState(tailwind3, { window, ssr: { width: 375 } });
     expect(rs.getServerSnapshot().current).toBe('base');
     expect(rs.get().current).toBe('xl');
+  });
+
+  it('still reports the real size when the window lacks matchMedia', () => {
+    const window = { innerWidth: 900, innerHeight: 600 } as unknown as Window;
+    const rs = createResponsiveState(tailwind, { window, trackViewport: true });
+    expect([rs.get().width, rs.get().height]).toEqual([900, 600]);
+    expect(rs.get().current).toBe('base');
+    expect(rs.getServerSnapshot().width).toBe(0);
   });
 
   it('rejects combining ssrBreakpoint with ssr.width', () => {
@@ -172,6 +216,20 @@ describe('fromCssVariables()', () => {
       '--breakpoint-xl': 'initial',
     });
     expect(fromCssVariables(tailwind, { window })).toEqual({ ...tailwind, md: '50rem' });
+  });
+
+  it('ignores values that cannot be ordered by width', () => {
+    const window = cssWindow({
+      '--breakpoint-sm': 'calc(40rem + 1px)',
+      '--breakpoint-md': '50vw',
+      '--breakpoint-lg': '1000',
+      '--breakpoint-xl': '70EM',
+    });
+    expect(fromCssVariables(tailwind, { window })).toEqual({
+      ...tailwind,
+      lg: '1000',
+      xl: '70EM',
+    });
   });
 
   it('supports a custom prefix and target', () => {

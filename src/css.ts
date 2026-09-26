@@ -1,4 +1,5 @@
 import { resolveWindow } from './env';
+import { ORDERABLE_LENGTH } from './media';
 import type { BreakpointMap, BreakpointName } from './types';
 
 export interface CssVariableOptions {
@@ -17,7 +18,9 @@ export interface CssVariableOptions {
  * Reads breakpoint widths from CSS custom properties so JavaScript and CSS
  * share one source of truth. Every name in `fallback` is looked up as
  * `${prefix}${name}` (e.g. `--breakpoint-md`); names without a variable, and
- * every name during SSR, keep their fallback value.
+ * every name during SSR, keep their fallback value. Only `px`, `rem`, `em` and
+ * unitless values are used, because breakpoints must be ordered by width;
+ * anything else (`calc()`, `clamp()`, `vw`) keeps the fallback too.
  *
  * Tailwind CSS v4 only emits theme variables that your CSS uses. Declare the
  * breakpoints in `@theme static { ... }` (or reference them) so they exist at
@@ -40,7 +43,7 @@ export function fromCssVariables<T extends BreakpointMap>(
   const prefix = options.prefix ?? '--breakpoint-';
   for (const name of Object.keys(fallback)) {
     const value = style.getPropertyValue(prefix + name).trim();
-    if (value && value !== 'initial') result[name] = value;
+    if (ORDERABLE_LENGTH.test(value)) result[name] = value;
   }
   return result;
 }

@@ -462,7 +462,8 @@ const stopWatchingViewport = appViewport.subscribe((nextViewport, previousViewpo
 
 stopWatchingViewport();
 
-// Only when a derived value changes:
+// Only when a derived value changes. With `immediate: true` the listener also
+// runs once right away, receiving the current value as both arguments.
 const stop = appViewport.watch(
   (viewport) => viewport.current,
   (current, previous) => console.log(`${previous} → ${current}`),
@@ -523,6 +524,27 @@ const requestViewport = createResponsiveState(tailwind, {
 ```
 
 On the client, media queries are evaluated synchronously when the store is created, while `getServerSnapshot()` keeps returning the server assumption. In React, supply `getServerSnapshot` to `useSyncExternalStore`, as shown in the React recipe; in Vue, use the SSR composable above.
+
+**Server and client must agree.** During hydration the client renders with `getServerSnapshot()`, so it must be created with the same `ssrBreakpoint` / `ssr` options the server used. A store with fixed options can be a shared module-level singleton — on the server it holds no per-request state. When the width varies per request, create the store per request and send the width to the client:
+
+```ts
+// viewport.ts — one factory for both sides
+export const createAppViewport = (ssrWidth?: number) =>
+  createResponsiveState(tailwind, ssrWidth === undefined ? {} : { ssr: { width: ssrWidth } });
+
+// server, per request
+const width = Number(request.headers.get('sec-ch-viewport-width')) || undefined;
+const viewport = createAppViewport(width); // serialize `width` into the page
+
+// client, once
+const viewport = createAppViewport(window.__SSR_VIEWPORT_WIDTH__);
+```
+
+`fromCssVariables()` cannot read CSS on the server, so it returns its fallback there. Keep the fallback identical to your CSS breakpoints, or the server and the hydrating client can resolve different tiers.
+
+## Upgrading
+
+Pre-1.0 minor releases can contain breaking changes. [MIGRATION.md](./MIGRATION.md) lists, for each release, how to tell whether you are affected and exactly what to change — including the switch of the `tailwind` preset to Tailwind v4's `rem` values in 0.4 and the "smallest breakpoint must be 0" rule in 0.3.
 
 ## Contributing
 

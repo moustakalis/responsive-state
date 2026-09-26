@@ -61,6 +61,24 @@ describe('fromCssVariables() in a real browser', () => {
   });
 });
 
+describe('fromCssVariables() with values that cannot be ordered', () => {
+  it('keeps the fallback so breakpoint order stays correct', async () => {
+    const style = document.createElement('style');
+    style.textContent = ':root { --breakpoint-sm: calc(40rem + 1px); }';
+    document.head.append(style);
+    cleanups.push(() => style.remove());
+
+    const breakpoints = fromCssVariables(tailwind);
+    expect(breakpoints.sm).toBe('40rem');
+
+    await page.viewport(1400, 700);
+    const rs = createResponsiveState(breakpoints);
+    cleanups.push(() => rs.destroy());
+    expect(rs.breakpoints).toEqual(['base', 'sm', 'md', 'lg', 'xl', '2xl']);
+    expect(rs.get().current).toBe('xl');
+  });
+});
+
 describe('watch() in a real browser', () => {
   it('reports entering and leaving a breakpoint', async () => {
     await page.viewport(900, 700);

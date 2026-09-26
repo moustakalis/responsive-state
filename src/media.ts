@@ -22,7 +22,8 @@ export function stepDown(value: number | string): string {
   if (typeof value === 'number') return `${value - 0.02}px`;
   const match = /^(-?[\d.]+)([a-z%]*)$/i.exec(value.trim());
   if (!match) return `calc(${value} - 0.02px)`;
-  const [, num, unit] = match;
+  const [, num, rawUnit] = match;
+  const unit = rawUnit!.toLowerCase();
   const delta = unit === 'px' || unit === '' ? 0.02 : 0.001;
   return `${Number(num) - delta}${unit || 'px'}`;
 }
@@ -45,9 +46,11 @@ export function betweenWidth(from: number | string, to: number | string): string
  * last.
  * @internal
  */
+export const ORDERABLE_LENGTH = /^(-?[\d.]+)(px|rem|em)?$/i;
+
 export function toPx(value: number | string): number {
   if (typeof value === 'number') return value;
-  const match = /^(-?[\d.]+)(px|rem|em)?$/i.exec(value.trim());
+  const match = ORDERABLE_LENGTH.exec(value.trim());
   if (!match) return Number.POSITIVE_INFINITY;
   const num = Number(match[1]);
   const unit = (match[2] ?? 'px').toLowerCase();
