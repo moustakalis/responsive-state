@@ -14,6 +14,7 @@ describe('media helpers', () => {
     expect(stepDown(768)).toBe('767.98px');
     expect(stepDown('768px')).toBe('767.98px');
     expect(stepDown('48rem')).toBe('47.999rem');
+    expect(stepDown('1024PX')).toBe('1023.98px');
   });
 
   it('builds queries', () => {

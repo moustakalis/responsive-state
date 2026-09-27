@@ -77,13 +77,16 @@ if (appViewport.up('lg')) {
 
 | Everyday need | What `responsive-state` gives you |
 |---|---|
-| Close an open mobile menu once desktop navigation takes over | `subscribe()` plus `up('lg')` |
+| Close an open mobile menu once desktop navigation takes over | `watch((s) => s.up.lg, …)` |
 | Decide how many items to fetch or render | `pick()` |
 | Skip a costly desktop-only client feature | `up()` / `is()` |
 | Adapt JavaScript interaction to touch, dark mode, or reduced motion | `feature()` |
 | Add a stable breakpoint marker for browser tests | `syncAttribute` |
 | Read a deterministic value during React SSR | `getServerSnapshot()` |
 | Support a desktop-first value cascade as well as mobile-first | `pick(..., { fallbackDirection: 'down' })` |
+| Keep JavaScript breakpoints identical to Tailwind v4's CSS | `fromCssVariables(tailwind)` |
+| Reuse the exact tier queries in CSS-in-JS | `toMediaQueries()` |
+| Render the right tier on the server from a known width | `ssr: { width }` |
 
 ## When not to use it
 
@@ -123,10 +126,16 @@ const appViewport = createResponsiveState(tailwind);
 
 | Preset | Breakpoints |
 |---|---|
-| `tailwind` | `base` 0, `sm` 640, `md` 768, `lg` 1024, `xl` 1280, `2xl` 1536 |
+| `tailwind` | Tailwind v4: `base` 0, `sm` 40rem, `md` 48rem, `lg` 64rem, `xl` 80rem, `2xl` 96rem |
+| `tailwind3` | Tailwind v3: `base` 0, `sm` 640, `md` 768, `lg` 1024, `xl` 1280, `2xl` 1536 |
 | `bootstrap` | `xs` 0, `sm` 576, `md` 768, `lg` 992, `xl` 1200, `xxl` 1400 |
 | `material` | `compact` 0, `medium` 600, `expanded` 840, `large` 1200, `extraLarge` 1600 |
+| `antDesign` | `xs` 0, `sm` 576, `md` 768, `lg` 992, `xl` 1200, `xxl` 1600, `xxxl` 1920 |
+| `bulma` | `mobile` 0, `tablet` 769, `desktop` 1024, `widescreen` 1216, `fullhd` 1408 |
+| `foundation` | `small` 0, `medium` 640, `large` 1024, `xlarge` 1200, `xxlarge` 1440 |
 | `devices` | `mobile` 0, `tablet` 768, `desktop` 1440 |
+
+Numbers are pixels. The `tailwind` preset uses `rem` like Tailwind v4 itself, so it keeps matching your CSS when someone changes their browser's default font size. Unused presets are tree-shaken away.
 
 Or use the names and values your own product already understands. Numeric values (and unitless strings like `'768'`) are pixels; CSS lengths such as `48rem` also work. The smallest breakpoint must be `0`, so every viewport width maps to a breakpoint — `createResponsiveState` throws otherwise.
 
@@ -152,22 +161,36 @@ CSS can switch the navigation layout. It cannot close an already-open dialog, re
 ```ts
 import { appViewport } from './appViewport';
 
-let isNavigationOpen = false;
-
-const stopWatchingViewport = appViewport.subscribe((nextViewport, previousViewport) => {
-  const justReachedDesktop = !previousViewport.up.lg && nextViewport.up.lg;
-
-  if (justReachedDesktop && isNavigationOpen) {
-    isNavigationOpen = false;
-    closeNavigationDialog();
-  }
-});
+const stopWatching = appViewport.watch(
+  (viewport) => viewport.up.lg,
+  (isDesktop) => {
+    if (isDesktop) closeNavigationDialog();
+  },
+);
 
 // Call this only if this is not an app-wide store.
-stopWatchingViewport();
+stopWatching();
 ```
 
-The callback runs when a relevant media query changes, rather than for every pixel moved during a resize drag.
+`watch()` runs the callback only when the selected value changes — here, when the viewport crosses into or out of `lg` — rather than for every pixel moved during a resize drag.
+
+### Define your own tiers
+
+Selectors can combine breakpoints and feature queries, so tiers such as "handset" need no extra configuration.
+
+```ts
+const appViewport = createResponsiveState(tailwind, {
+  features: { portrait: '(orientation: portrait)' },
+});
+
+appViewport.watch(
+  (viewport) => viewport.below.md && viewport.features.portrait,
+  (isHandset) => setCompactToolbar(isHandset),
+  { immediate: true },
+);
+```
+
+Return primitives from selectors, or pass `equals` when you return a new object or array each time.
 
 ### Fetch an appropriate amount of data
 
@@ -259,6 +282,47 @@ if (appViewport.feature('reducedMotion')) {
 }
 ```
 
+### Tailwind v4: read the breakpoints from your CSS
+
+Tailwind v4 defines breakpoints as `--breakpoint-*` theme variables. `fromCssVariables()` reads them at runtime so JavaScript can never drift from your CSS. Names without a variable, and every name during server rendering, keep the preset's value.
+
+```css
+/* Tailwind only emits theme variables your CSS uses; `static` emits them all. */
+@theme static {
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+```
+
+```ts
+import { createResponsiveState, fromCssVariables, tailwind } from 'responsive-state';
+
+export const appViewport = createResponsiveState(fromCssVariables(tailwind));
+```
+
+Custom names work too — pass your own map as the fallback: `fromCssVariables({ base: 0, tablet: '40rem', laptop: '64rem' })`. Use `prefix` for other naming schemes and `target` to read from a different element. Call it after your stylesheet has loaded.
+
+### Share the tier queries with CSS-in-JS
+
+`toMediaQueries()` returns one exclusive query per tier — the same ranges the store uses.
+
+```ts
+import { tailwind, toMediaQueries } from 'responsive-state';
+
+const media = toMediaQueries(tailwind);
+// media.md → '(min-width: 48rem) and (max-width: 63.999rem)'
+
+const Card = styled.div`
+  padding: 1rem;
+  @media ${media.md} {
+    padding: 2rem;
+  }
+`;
+```
+
 ### Give browser tests an explicit breakpoint hook
 
 For the rare cases where CSS and browser tests need an explicit shared marker, mirror the active breakpoint to `<html>`.
@@ -310,6 +374,8 @@ function SearchControls() {
 
 ### Vue 3: a small composable
 
+For client-only apps (Vite SPA), read the live snapshot straight away:
+
 ```ts
 // useAppViewport.ts
 import { onScopeDispose, shallowRef } from 'vue';
@@ -317,12 +383,28 @@ import { appViewport } from './appViewport';
 
 export function useAppViewport() {
   const viewport = shallowRef(appViewport.get());
+  onScopeDispose(appViewport.subscribe((next) => (viewport.value = next)));
+  return viewport;
+}
+```
 
-  const stopWatchingViewport = appViewport.subscribe((nextViewport) => {
-    viewport.value = nextViewport;
+With server rendering (Nuxt, Vite SSR), start from the server snapshot and switch to the live one after mounting, so the first client render matches the server HTML and hydration does not mismatch:
+
+```ts
+// useAppViewport.ts
+import { onMounted, onScopeDispose, shallowRef } from 'vue';
+import { appViewport } from './appViewport';
+
+export function useAppViewport() {
+  const viewport = shallowRef(appViewport.getServerSnapshot());
+  let stop = () => {};
+
+  onMounted(() => {
+    viewport.value = appViewport.get();
+    stop = appViewport.subscribe((next) => (viewport.value = next));
   });
+  onScopeDispose(() => stop());
 
-  onScopeDispose(stopWatchingViewport);
   return viewport;
 }
 ```
@@ -337,6 +419,7 @@ export function useAppViewport() {
 |---|---:|---|
 | `features` | `{}` | You want named media queries for motion, color scheme, pointer type, and more |
 | `ssrBreakpoint` | Smallest breakpoint | Server rendering needs a different deterministic initial tier |
+| `ssr` | — | The server knows (or guesses) the viewport: `{ width, height, features }`. Cannot be combined with `ssrBreakpoint` |
 | `syncAttribute` | `false` | You need `data-breakpoint` on an element, usually `<html>` |
 | `trackViewport` | `false` | You truly need numeric `width` and `height` in the snapshot |
 | `window` | Browser global | You are working with an iframe, popup, or controlled test window |
@@ -352,6 +435,9 @@ viewport.active;   // ['base', 'sm', 'md', 'lg']
 viewport.is.lg;    // true
 viewport.up.md;    // true
 viewport.down.xl;  // true
+viewport.below.xl; // true — strictly narrower than xl
+viewport.min;      // '64rem' — where the current tier starts
+viewport.max;      // '80rem' — where the next tier starts (null at the widest)
 viewport.width;    // 0 unless trackViewport: true
 ```
 
@@ -362,7 +448,8 @@ Snapshots are frozen. Read them freely; subscribe when your code must react to f
 ```ts
 appViewport.is('md');            // exactly md
 appViewport.up('md');            // md and wider
-appViewport.down('lg');          // lg and narrower
+appViewport.down('lg');          // lg and narrower (inclusive of lg)
+appViewport.below('lg');         // narrower than lg — like Tailwind's max-lg
 appViewport.between('sm', 'lg'); // sm inclusive, lg exclusive
 ```
 
@@ -374,6 +461,14 @@ const stopWatchingViewport = appViewport.subscribe((nextViewport, previousViewpo
 });
 
 stopWatchingViewport();
+
+// Only when a derived value changes. With `immediate: true` the listener also
+// runs once right away, receiving the current value as both arguments.
+const stop = appViewport.watch(
+  (viewport) => viewport.current,
+  (current, previous) => console.log(`${previous} → ${current}`),
+  { immediate: false, equals: Object.is },
+);
 ```
 
 ### Resolve a breakpoint-aware value
@@ -412,17 +507,44 @@ embeddedViewport.destroy();
 
 ## Server rendering
 
-On the server, there is no real viewport. The store therefore exposes a stable snapshot based on the smallest breakpoint by default.
+On the server, there is no real viewport. The store therefore exposes a stable snapshot based on the smallest breakpoint by default. Choose a different tier by name, or describe the viewport you expect:
 
 ```ts
 import { createResponsiveState, tailwind } from 'responsive-state';
 
-const marketingViewport = createResponsiveState(tailwind, {
-  ssrBreakpoint: 'lg',
+// A fixed tier…
+const marketingViewport = createResponsiveState(tailwind, { ssrBreakpoint: 'lg' });
+
+// …or a width, resolved exactly like the browser would. Useful with the
+// `Sec-CH-Viewport-Width` client hint, or a guess from the user agent.
+const requestViewport = createResponsiveState(tailwind, {
+  features: { reducedMotion: '(prefers-reduced-motion: reduce)' },
+  ssr: { width: 1280, features: { reducedMotion: false } },
 });
 ```
 
-On the client, media queries are evaluated synchronously when the store is created. In React, supply `getServerSnapshot` to `useSyncExternalStore`, as shown in the React recipe.
+On the client, media queries are evaluated synchronously when the store is created, while `getServerSnapshot()` keeps returning the server assumption. In React, supply `getServerSnapshot` to `useSyncExternalStore`, as shown in the React recipe; in Vue, use the SSR composable above.
+
+**Server and client must agree.** During hydration the client renders with `getServerSnapshot()`, so it must be created with the same `ssrBreakpoint` / `ssr` options the server used. A store with fixed options can be a shared module-level singleton — on the server it holds no per-request state. When the width varies per request, create the store per request and send the width to the client:
+
+```ts
+// viewport.ts — one factory for both sides
+export const createAppViewport = (ssrWidth?: number) =>
+  createResponsiveState(tailwind, ssrWidth === undefined ? {} : { ssr: { width: ssrWidth } });
+
+// server, per request
+const width = Number(request.headers.get('sec-ch-viewport-width')) || undefined;
+const viewport = createAppViewport(width); // serialize `width` into the page
+
+// client, once
+const viewport = createAppViewport(window.__SSR_VIEWPORT_WIDTH__);
+```
+
+`fromCssVariables()` cannot read CSS on the server, so it returns its fallback there. Keep the fallback identical to your CSS breakpoints, or the server and the hydrating client can resolve different tiers.
+
+## Upgrading
+
+Pre-1.0 minor releases can contain breaking changes. [MIGRATION.md](./MIGRATION.md) lists, for each release, how to tell whether you are affected and exactly what to change — including the switch of the `tailwind` preset to Tailwind v4's `rem` values in 0.4 and the "smallest breakpoint must be 0" rule in 0.3.
 
 ## Contributing
 

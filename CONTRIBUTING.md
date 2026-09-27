@@ -30,6 +30,6 @@ pnpm test:browser
 These are deliberate and PRs that break them will be asked to change:
 
 - **Zero runtime dependencies.**
-- **Under 2 kB gzipped** for the ESM entry (enforced by `size-limit`).
+- **Small**: `createResponsiveState` alone under 2 kB gzipped, the whole package under 2.5 kB (enforced by `size-limit`).
 - **No framework imports** in `src/` — the core must run in any environment.
 - **SSR-safe**: nothing may touch `window` at module scope.
